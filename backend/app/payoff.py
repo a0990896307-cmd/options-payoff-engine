@@ -151,6 +151,26 @@ def breakevens(legs: list[Leg]) -> list[float]:
 
 # ----------------------------------------------------------------------- curve
 
+def _chart_span(legs: list[Leg]) -> float:
+    """
+    Half-width of the plotted price range.
+
+    Distinct from _span, which is sized for root-finding: a 1.0 floor is
+    enough to place a sample point inside an unbounded tail, but it is
+    far too narrow to plot. A single-strike structure such as a long
+    call or a straddle has a zero strike range, so without this the
+    chart collapses to a vertical line at the strike.
+
+    The floor is therefore proportional to the strike level, which keeps
+    the axis sensible for a NIFTY strike near 20000 and for a SPX strike
+    near 600 without hardcoding either.
+    """
+    strikes = _strikes(legs)
+    spread = strikes[-1] - strikes[0]
+    floor = max(abs(strikes[0]) * 0.10, 1.0)
+    return max(spread * 0.6, floor)
+
+
 def payoff_curve(
     legs: list[Leg],
     lower: float | None = None,
@@ -159,8 +179,9 @@ def payoff_curve(
 ) -> dict[str, list[float]]:
     """Sampled payoff curve for charting."""
     strikes = _strikes(legs)
-    lo = lower if lower is not None else strikes[0] - _span(legs) * 0.4
-    hi = upper if upper is not None else strikes[-1] + _span(legs) * 0.4
+    pad = _chart_span(legs)
+    lo = lower if lower is not None else strikes[0] - pad
+    hi = upper if upper is not None else strikes[-1] + pad
     if hi <= lo:
         lo, hi = strikes[0] - 50, strikes[0] + 50
 

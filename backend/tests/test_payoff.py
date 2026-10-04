@@ -219,6 +219,44 @@ check("curve length", len(curve["prices"]), 50)
 check("curve monotonic", all(a <= b for a, b in zip(curve["pnl"], curve["pnl"][1:])), True)
 check("curve keys", sorted(curve.keys()), ["lots", "pnl", "prices"])
 
+# ------------------------------------------------- chart range sanity (regression)
+# A single-strike structure has a zero strike range. _span is floored at 1.0
+# for root-finding, which is too narrow to plot, so payoff_curve uses a
+# separate strike-proportional floor. These checks pin that down: without the
+# fix every chart of a long call or straddle collapsed to a vertical line.
+for name, legs in {
+    "single call": [Leg(CALL, BUY, 2000, 100)],
+    "single put": [Leg(PUT, BUY, 2000, 100)],
+    "straddle": [Leg(CALL, BUY, 2000, 100), Leg(PUT, BUY, 2000, 100)],
+    "vertical": [Leg(CALL, BUY, 2000, 100), Leg(CALL, SELL, 2100, 100)],
+}.items():
+    curve = payoff_curve(legs)
+    width = max(curve["prices"]) - min(curve["prices"])
+    check(f"chart width positive: {name}", width > 0, True)
+    check(f"chart width usable: {name}", width >= 200.0, True)
+    check(f"chart strikes inside: {name}",
+          min(l.strike for l in legs) >= min(curve["prices"])
+          and max(l.strike for l in legs) <= max(curve["prices"]), True)
+    check(f"chart samples distinct: {name}", len(set(curve["prices"])) > 1, True)
+
+# Chart range must not depend on how many points are requested.
+wide = payoff_curve([Leg(CALL, BUY, 2000, 100)], points=400)
+narrow = payoff_curve([Leg(CALL, BUY, 2000, 100)], points=50)
+check("chart range stable across resolution",
+      round(max(wide["prices"]) - min(wide["prices"]), 2),
+      round(max(narrow["prices"]) - min(narrow["prices"]), 2))
+
+# A higher-strike structure scales its axis proportionally, not by a fixed offset.
+low = payoff_curve([Leg(CALL, BUY, 200, 5)], points=200)
+high = payoff_curve([Leg(CALL, BUY, 20000, 500)], points=200)
+check("chart span scales with strike level",
+      (max(high["prices"]) - min(high["prices"]))
+      > (max(low["prices"]) - min(low["prices"])) * 10, True)
+
+# Explicit bounds must still win over the automatic range.
+fixed = payoff_curve([Leg(CALL, BUY, 2000, 100)], lower=1900, upper=2100, points=50)
+check("explicit lower honoured", min(fixed["prices"]), 1900.0)
+check("explicit upper honoured", max(fixed["prices"]), 2100.0)
 print()
 if failures:
     print(f"FAILED {len(failures)}/{checks}")
