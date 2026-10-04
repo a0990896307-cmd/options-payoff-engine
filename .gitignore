@@ -8,3 +8,8 @@ venv/
 node_modules/
 dist/
 build/
+
+# client proposals and per-client work - never public
+docs/PROPOSAL*.md
+docs/PROPOSAL*.txt
+launcher/
